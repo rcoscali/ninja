@@ -116,6 +116,8 @@ void BuildStatus::BuildEdgeFinished(Edge* edge,
   int64_t now = GetTimeMillis();
 
   ++finished_edges_;
+  if (target_edges_ > 0)
+    target_edges_--;
 
   RunningEdgeMap::iterator i = running_edges_.find(edge);
   *start_time = i->second;
@@ -209,6 +211,12 @@ string BuildStatus::FormatProgressStatus(
         out += buf;
         break;
 
+        // Number of edges before slice end
+      case 'T': 
+        snprintf(buf, sizeof(buf), "%d", target_edges_);
+        out += buf;
+        break;
+
         // Running edges.
       case 'r': {
         int running_edges = started_edges_ - finished_edges_;
@@ -288,13 +296,26 @@ void BuildStatus::PrintStatus(Edge* edge, EdgeStatus status) {
                  force_full_command ? LinePrinter::FULL : LinePrinter::ELIDE);
 }
 
-Plan::Plan() : command_edges_(0), wanted_edges_(0) {}
+Plan::Plan() : command_edges_(0), wanted_edges_(0), target_edges_(0), sliced_plan_(false) {}
 
 void Plan::Reset() {
   command_edges_ = 0;
   wanted_edges_ = 0;
+  target_edges_ = 0;
+  sliced_plan_ = false;
   ready_.clear();
   want_.clear();
+}
+
+bool Plan::SlicePlan(int target_edge) {
+  bool ret = !sliced_plan_;
+
+  if (!sliced_plan_) {
+    sliced_plan_ = true;
+    target_edges_ = target_edge;
+  }
+  
+  return ret;
 }
 
 bool Plan::AddTarget(Node* node, string* err) {
@@ -393,6 +414,9 @@ void Plan::EdgeFinished(Edge* edge, EdgeResult result) {
     --wanted_edges_;
   want_.erase(e);
   edge->outputs_ready_ = true;
+
+  if (sliced_plan_ && target_edges_ > 0)
+    target_edges_--;
 
   // Check off any nodes we were waiting for with this edge.
   for (vector<Node*>::iterator o = edge->outputs_.begin();
@@ -621,6 +645,12 @@ bool Builder::AlreadyUpToDate() const {
 
 bool Builder::Build(string* err) {
   assert(!AlreadyUpToDate());
+
+  if (config_.sliced_targets) {
+    int n_targets = config_.sliced_percent ? (plan_.command_edge_count() * config_.sliced_targets) / 100.0: config_.sliced_targets;
+    plan_.SlicePlan(n_targets); /// TODO[RCS]: emit warning if cannot setup sliced plan
+    status_->SetSliceTarget(n_targets);
+  }
 
   status_->PlanHasTotalEdges(plan_.command_edge_count());
   int pending_commands = 0;

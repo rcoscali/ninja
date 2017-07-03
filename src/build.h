@@ -41,17 +41,25 @@ struct State;
 struct Plan {
   Plan();
 
+  /// Slice this plan with the provided number of target to build
+  /// Returns true if the plan was sliced
+  /// Returns false if it was not possible to slice it (already sliced)
+  bool SlicePlan(int target_edges);
+
   /// Add a target to our plan (including all its dependencies).
   /// Returns false if we don't need to build this target; may
   /// fill in |err| with an error message if there's a problem.
   bool AddTarget(Node* node, string* err);
 
-  // Pop a ready edge off the queue of edges to build.
-  // Returns NULL if there's no work to do.
+  /// Pop a ready edge off the queue of edges to build.
+  /// Returns NULL if there's no work to do.
   Edge* FindWork();
 
   /// Returns true if there's more work to be done.
-  bool more_to_do() const { return wanted_edges_ > 0 && command_edges_ > 0; }
+  bool more_to_do() const
+  {
+    return (sliced_plan_ ? target_edges_ > 0 : 1) && wanted_edges_ > 0 && command_edges_ > 0;
+  }
 
   /// Dumps the current state of the plan.
   void Dump();
@@ -97,6 +105,12 @@ private:
 
   /// Total remaining number of wanted edges.
   int wanted_edges_;
+
+  /// Remaining number of edge for the slice target;
+  int target_edges_;
+
+  /// Is the plan sliced ?
+  bool sliced_plan_;
 };
 
 /// CommandRunner is an interface that wraps running the build
@@ -125,7 +139,8 @@ struct CommandRunner {
 /// Options (e.g. verbosity, parallelism) passed to a build.
 struct BuildConfig {
   BuildConfig() : verbosity(NORMAL), dry_run(false), parallelism(1),
-                  failures_allowed(1), max_load_average(-0.0f) {}
+    failures_allowed(1), max_load_average(-0.0f),
+    sliced_targets(0), sliced_percent(false)  {}
 
   enum Verbosity {
     NORMAL,
@@ -139,6 +154,10 @@ struct BuildConfig {
   /// The maximum load average we must not exceed. A negative value
   /// means that we do not have any limit.
   double max_load_average;
+  /// If plan is sliced, number of target to reach before stopping build
+  int sliced_targets;
+  /// Used -S for specifying percents for slices
+  bool sliced_percent;
 };
 
 /// Builder wraps the build process: starting commands, updating status.
@@ -203,6 +222,7 @@ struct BuildStatus {
                          int* start_time, int* end_time);
   void BuildStarted();
   void BuildFinished();
+  void SetSliceTarget(int target) {target_edges_ = target;} ;
 
   enum EdgeStatus {
     kEdgeStarted,
@@ -225,7 +245,7 @@ struct BuildStatus {
   /// Time the build started.
   int64_t start_time_millis_;
 
-  int started_edges_, finished_edges_, total_edges_;
+  int started_edges_, finished_edges_, total_edges_, target_edges_;
 
   /// Map of running edge to time the edge started running.
   typedef map<Edge*, int> RunningEdgeMap;

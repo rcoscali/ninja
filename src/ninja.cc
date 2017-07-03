@@ -1036,9 +1036,27 @@ int ReadFlags(int* argc, char*** argv,
 
   int opt;
   while (!options->tool &&
-         (opt = getopt_long(*argc, *argv, "d:f:j:k:l:nt:vw:C:h", kLongOptions,
+         (opt = getopt_long(*argc, *argv, "S:s:d:f:j:k:l:nt:vw:C:h", kLongOptions,
                             NULL)) != -1) {
     switch (opt) {
+      case 's': {
+        char *end;
+        int sliced_value = strtol(optarg, &end, 10);
+        if (*end != 0 || sliced_value <= 0)
+          Fatal("invalid -s parameter");
+        config->sliced_targets = sliced_value;
+        config->sliced_percent = false;
+        break;
+      }
+      case 'S': {
+        char *end;
+        int sliced_percent = strtol(optarg, &end, 10);
+        if (*end != 0 || sliced_percent <= 0)
+          Fatal("invalid -S parameter");
+        config->sliced_targets = sliced_percent;
+        config->sliced_percent = true;
+        break;
+      }
       case 'd':
         if (!DebugEnable(optarg))
           return 1;
