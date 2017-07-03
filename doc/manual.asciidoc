@@ -1,6 +1,6 @@
 The Ninja build system
 ======================
-v1.7.1, Apr 2016
+v1.7.2-rcs, Jul 2017
 
 
 Introduction
@@ -188,6 +188,23 @@ match those of Make; e.g `ninja -C build -j 20` changes into the
 Ninja defaults to running commands in parallel anyway, so typically
 you don't need to pass `-j`.)
 
+'ninja -s 20' allows to build the project one slice at a time, a slice
+being here 20 reached targets. Ninja will run 20 commands in order to
+update 20 targets, then, terminates. The build is not finished. In order
+to finishthe build you will have to run again ninja for 20 more targets,
+and so on until you exausted all targets. By using '-S' you can specify
+a percentage of total number of targets to build. (actually 'ninja -S 100'
+is exactly the same as no option at all. These options helps avoiding
+some timeouts in CI because it allows to split a long build into several
+shorter jobs.
+# ninja -S 10
+# ninja -S 10
+# ninja -S 10
+# ninja -S 10
+# ninja -S 10
+# ninja -S 10
+will build a project that require 60 targets command. Take care that the
+number of targets specified with -S option will change at each invocation.
 
 Environment variables
 ~~~~~~~~~~~~~~~~~~~~~
@@ -199,6 +216,7 @@ Several placeholders are available:
 
 `%s`:: The number of started edges.
 `%t`:: The total number of edges that must be run to complete the build.
+`%T`:: The number of edges that must be run to reach the target for the slice.
 `%p`:: The percentage of started edges.
 `%r`:: The number of currently running edges.
 `%u`:: The number of remaining edges to start.
